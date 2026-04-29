@@ -2,6 +2,11 @@
 
 프로시저/함수 ID(또는 이름)를 기준으로 환경별 정의가 다른지 확인하고, 공통코드(`CM_CD_D`) 갭도 비교할 수 있습니다.
 
+## GitHub Pages
+
+정적 랜딩 페이지: [https://eunwing94.github.io/dbgit/](https://eunwing94.github.io/dbgit/)  
+(저장소 루트 또는 `docs/`에 `index.html`이 있어야 합니다. Settings → Pages에서 **main** + **/(root)** 또는 **/docs** 중 배포 경로와 맞추세요.)
+
 ## 실행 방법 (요약)
 
 1. 리포지토리 루트에서 가상환경 생성 및 활성화
