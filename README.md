@@ -1,3 +1,37 @@
+# dbgit — C#/.NET (`feature/csharp01`)
+
+이 브랜치는 **.NET 8 콘솔 CLI**로 작성된 `dbgit`의 C# 버전입니다.  
+(Python/Streamlit 버전은 `feature/eun-0506` 참고)
+
+## 요구 사항
+
+- .NET SDK 8
+- SQL Server에 접근 가능한 네트워크
+- `.env` (예시는 `.env.example`)
+
+## 실행
+
+```bash
+dotnet run --project Dbgit.csproj -- dbo.usp_Sample --envs PRD,STG,DEV,QA --baseline PRD -o json
+```
+
+## 빌드
+
+```bash
+dotnet build -c Release
+```
+
+## 환경 변수 규칙
+
+- `<ENV>_HOST`, `<ENV>_PORT`, `<ENV>_USER`, `<ENV>_PASSWORD`, `<ENV>_DATABASE`
+- 예: `PRD_HOST`, `STG_HOST` …
+
+## 출력 형식
+
+- `text` (기본)
+- `json`
+- `markdown`
+
 <p align="center">
   <a href="https://github.com/eunwing94/dbgit">
     <img src="https://img.shields.io/badge/dbgit-DB%20형상%20비교-6366F1?style=for-the-badge&logo=database&logoColor=white" alt="dbgit" />
