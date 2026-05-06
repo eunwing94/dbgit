@@ -86,7 +86,7 @@ flowchart TB
   end
 
   subgraph app["dbgit"]
-    B1["Streamlit UI<br/>app.py → st_app → streamlit_pages"]
+    B1["Streamlit UI<br/>app.py → st_app → ui"]
     B2["CLI<br/>python -m dbgit"]
     B3["compare · common_code · diff_text"]
   end

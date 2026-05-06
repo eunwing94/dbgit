@@ -18,7 +18,7 @@ pytest
 
 ## 코드 스타일
 
-- DB 접속·비교 로직은 `src/dbgit/` 패키지에 두고, Streamlit 전용 화면은 `streamlit_pages.py`, 진입은 `st_app.py`를 유지합니다.
+- DB 접속·비교 로직은 `src/dbgit/` 패키지에 두고, Streamlit 전용 화면은 `src/dbgit/ui/`, 진입은 `st_app.py`를 유지합니다.
 - 사용자에게 노출되는 문자열은 가능하면 한국어로 통일합니다.
 
 ## 커밋 전 체크리스트

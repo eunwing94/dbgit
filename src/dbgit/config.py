@@ -54,3 +54,8 @@ def load_env_config(env_name: str) -> EnvConfig:
         database=database,
         driver=driver,
     )
+
+
+def load_env_configs(env_names: list[str]) -> list[EnvConfig]:
+    """여러 환경 이름에 대한 `EnvConfig` 목록."""
+    return [load_env_config(name) for name in env_names]

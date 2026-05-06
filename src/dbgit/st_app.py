@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .logging_setup import configure_logging
-from .streamlit_pages import run_main
+from .ui import run_main
 
 
 def run() -> None:

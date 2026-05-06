@@ -1,8 +1,1 @@
-import sys
-from pathlib import Path
-
-# pytest collects before path hook sometimes; ensure src on path
-_ROOT = Path(__file__).resolve().parents[1]
-_SRC = _ROOT / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+"""패키지 로드는 pytest.ini의 pythonpath = src 로 처리합니다."""

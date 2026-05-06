@@ -10,7 +10,8 @@ from typing import List
 from dotenv import load_dotenv
 
 from .compare import compare_across_envs
-from .config import EnvConfig, load_env_config
+from .config import load_env_configs
+from .constants import DEFAULT_ENVS
 from .logging_setup import configure_logging
 from .output_format import OutputFormat, format_proc_comparison
 
@@ -25,8 +26,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--envs",
-        default="PRD,STG,DEV,QA",
-        help="비교할 환경 목록 (콤마 구분, 기본: PRD,STG,DEV,QA)",
+        default=",".join(DEFAULT_ENVS),
+        help=f"비교할 환경 목록 (콤마 구분, 기본: {','.join(DEFAULT_ENVS)})",
     )
     parser.add_argument(
         "--baseline",
@@ -48,10 +49,6 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load_envs(env_list: List[str]) -> List[EnvConfig]:
-    return [load_env_config(name) for name in env_list]
-
-
 def main(argv: List[str] | None = None) -> int:
     configure_logging()
     parser = _build_parser()
@@ -66,7 +63,7 @@ def main(argv: List[str] | None = None) -> int:
         parser.error("baseline 환경이 envs 목록에 포함되어야 합니다.")
 
     try:
-        configs = _load_envs(env_list)
+        configs = load_env_configs(env_list)
         definitions = compare_across_envs(configs, args.proc)
     except Exception as exc:
         print(f"오류: {exc}", file=sys.stderr)

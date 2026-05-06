@@ -11,6 +11,35 @@ if TYPE_CHECKING:
 OutputFormat = Literal["text", "json", "markdown"]
 
 
+def diff_environment_names(
+    baseline: str,
+    definitions: Dict[str, "ProcDefinition"],
+) -> list[str]:
+    """기준 환경과 digest가 다른 환경 이름 목록."""
+    base_digest = definitions[baseline].digest
+    return [
+        env_name
+        for env_name, proc_def in definitions.items()
+        if proc_def.digest != base_digest
+    ]
+
+
+def proc_comparison_summary_rows(
+    baseline: str,
+    definitions: Dict[str, "ProcDefinition"],
+) -> list[dict[str, object]]:
+    """UI·테이블용 요약 행 (컬럼명 한국어 유지)."""
+    base_def = definitions[baseline]
+    return [
+        {
+            "환경": env_name,
+            "상태": "SAME" if proc_def.digest == base_def.digest else "DIFF",
+            "object_id": proc_def.object_id,
+        }
+        for env_name, proc_def in definitions.items()
+    ]
+
+
 def proc_comparison_payload(
     baseline: str,
     definitions: Dict[str, "ProcDefinition"],
@@ -27,11 +56,7 @@ def proc_comparison_payload(
             "digest": proc_def.digest,
             "same_as_baseline": proc_def.digest == base_digest,
         }
-    diff_envs = [
-        env_name
-        for env_name, proc_def in definitions.items()
-        if proc_def.digest != base_digest
-    ]
+    diff_envs = diff_environment_names(baseline, definitions)
     return {
         "baseline": baseline,
         "target_full_name": definitions[baseline].full_name,
@@ -52,10 +77,7 @@ def format_proc_comparison_text(baseline: str, definitions: Dict[str, "ProcDefin
         marker = "SAME" if proc_def.digest == base_def.digest else "DIFF"
         lines.append(f"- {env_name}: {marker} (object_id={proc_def.object_id})")
     lines.append("")
-    diff_envs = [
-        env_name for env_name, proc_def in definitions.items()
-        if proc_def.digest != base_def.digest
-    ]
+    diff_envs = diff_environment_names(baseline, definitions)
     if diff_envs:
         lines.append("차이나는 환경:")
         lines.append(", ".join(diff_envs))
@@ -95,10 +117,7 @@ def format_proc_comparison_markdown(baseline: str, definitions: Dict[str, "ProcD
         lines.append(
             f"| {env_name} | {st} | {proc_def.object_id} | `{proc_def.full_name}` |"
         )
-    diff_envs = [
-        env_name for env_name, proc_def in definitions.items()
-        if proc_def.digest != base_def.digest
-    ]
+    diff_envs = diff_environment_names(baseline, definitions)
     lines.append("")
     if diff_envs:
         lines.append(f"**차이 환경:** {', '.join(diff_envs)}")
