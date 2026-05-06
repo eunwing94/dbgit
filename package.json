@@ -1,0 +1,26 @@
+{
+  "name": "dbgit",
+  "version": "0.1.0",
+  "description": "SQL Server 프로시저/함수 환경 비교 (TypeScript)",
+  "type": "module",
+  "bin": {
+    "dbgit": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dbgit": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "mssql": "^10.0.4"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.5",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}
