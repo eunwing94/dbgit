@@ -1,14 +1,18 @@
+"""명령줄에서 프로시저/함수 환경 비교."""
+
 from __future__ import annotations
 
 import argparse
 import os
 import sys
-from typing import Dict, List
+from typing import List
 
 from dotenv import load_dotenv
 
 from .compare import compare_across_envs
 from .config import EnvConfig, load_env_config
+from .logging_setup import configure_logging
+from .output_format import OutputFormat, format_proc_comparison
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -34,41 +38,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=".env",
         help="환경변수 파일 경로 (기본: .env)",
     )
+    parser.add_argument(
+        "--output",
+        "-o",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="출력 형식 (기본: text)",
+    )
     return parser
 
 
 def _load_envs(env_list: List[str]) -> List[EnvConfig]:
-    configs: List[EnvConfig] = []
-    for env_name in env_list:
-        configs.append(load_env_config(env_name))
-    return configs
-
-
-def _format_result(baseline: str, definitions: Dict[str, object]) -> str:
-    lines: List[str] = []
-    base_def = definitions[baseline]
-    lines.append(f"기준 환경: {baseline} ({base_def.full_name})")
-    lines.append("")
-    lines.append("환경별 결과:")
-    for env_name, proc_def in definitions.items():
-        marker = "SAME" if proc_def.digest == base_def.digest else "DIFF"
-        lines.append(f"- {env_name}: {marker} (object_id={proc_def.object_id})")
-    lines.append("")
-
-    diff_envs = [
-        env_name for env_name, proc_def in definitions.items()
-        if proc_def.digest != base_def.digest
-    ]
-    if diff_envs:
-        lines.append("차이나는 환경:")
-        lines.append(", ".join(diff_envs))
-    else:
-        lines.append("모든 환경이 동일합니다.")
-
-    return "\n".join(lines)
+    return [load_env_config(name) for name in env_list]
 
 
 def main(argv: List[str] | None = None) -> int:
+    configure_logging()
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -87,7 +72,9 @@ def main(argv: List[str] | None = None) -> int:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
 
-    print(_format_result(baseline, definitions))
+    out: OutputFormat = args.output
+    text = format_proc_comparison(baseline, definitions, out)
+    print(text)
     return 0
 
 

@@ -1,0 +1,9 @@
+services:
+  dbgit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./.env:/app/.env:ro
+    environment:
+      DBGIT_LOG_LEVEL: INFO

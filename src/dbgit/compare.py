@@ -1,6 +1,9 @@
+"""프로시저·함수 정의를 sys.sql_modules에서 읽어 환경 간 해시 비교."""
+
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from typing import Dict, Iterable
@@ -8,9 +11,13 @@ from typing import Dict, Iterable
 from .config import EnvConfig
 from .db import fetch_one, open_connection
 
+logger = logging.getLogger("dbgit.compare")
+
 
 @dataclass(frozen=True)
 class ProcDefinition:
+    """단일 환경에서 조회한 객체 정의."""
+
     object_id: int
     schema_name: str
     name: str
@@ -19,15 +26,17 @@ class ProcDefinition:
 
     @property
     def full_name(self) -> str:
+        """schema.object_name"""
         return f"{self.schema_name}.{self.name}"
 
     @property
     def digest(self) -> str:
+        """정규화된 정의 본문의 SHA-256 (공백 무시 비교용)."""
         return hashlib.sha256(self.normalized_definition.encode("utf-8")).hexdigest()
 
 
-SUPPORTED_TYPES = ("P", "PC", "FN", "IF", "TF")
-
+# object_id(숫자) 또는 객체명/스키마.객체명으로 매칭
+# type: P 프로시저, PC CLR 프로시저, FN/IF/TF 함수
 PROC_QUERY = """
 SELECT TOP 1
     o.object_id,
@@ -50,6 +59,7 @@ ORDER BY
 
 
 def _parse_object_id(proc_identifier: str) -> int | None:
+    """숫자 문자열이면 object_id로 간주."""
     try:
         return int(proc_identifier)
     except ValueError:
@@ -57,12 +67,14 @@ def _parse_object_id(proc_identifier: str) -> int | None:
 
 
 def _normalize_definition(definition: str) -> str:
-    # 공백/개행 차이는 비교에서 제외
+    """모든 공백 제거 후 비교 (포매팅 차이 무시)."""
     return re.sub(r"\s+", "", definition)
 
 
 def fetch_proc_definition(config: EnvConfig, proc_identifier: str) -> ProcDefinition:
+    """지정 환경에서 프로시저/함수 정의 1건 조회."""
     object_id = _parse_object_id(proc_identifier)
+    logger.info("프로시저 조회 env=%s identifier=%s", config.name, proc_identifier)
     with open_connection(config) as conn:
         cursor = conn.cursor()
         row = fetch_one(
@@ -94,7 +106,10 @@ def compare_across_envs(
     configs: Iterable[EnvConfig],
     proc_identifier: str,
 ) -> Dict[str, ProcDefinition]:
+    """모든 환경에 대해 동일 식별자로 정의를 가져온 딕셔너리."""
+    logger.info("환경 간 비교 시작 identifier=%s", proc_identifier)
     results: Dict[str, ProcDefinition] = {}
     for config in configs:
         results[config.name] = fetch_proc_definition(config, proc_identifier)
+    logger.info("환경 간 비교 완료 identifier=%s", proc_identifier)
     return results
