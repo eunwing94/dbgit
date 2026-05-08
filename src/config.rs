@@ -1,3 +1,6 @@
+//! 설정 로딩.
+//!
+//! `.env`/환경변수에서 `{ENV}_HOST` 등의 키를 읽어 `EnvConfig`를 구성합니다.
 use std::env;
 
 #[derive(Debug, Clone)]

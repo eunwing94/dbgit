@@ -1,3 +1,6 @@
+//! 비교 유스케이스.
+//!
+//! SQL Server에서 모듈 정의를 읽어 정규화 후 digest(SHA-256)로 비교합니다.
 use std::env;
 use std::sync::OnceLock;
 use std::time::Duration;

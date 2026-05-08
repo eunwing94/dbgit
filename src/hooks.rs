@@ -1,3 +1,6 @@
+//! 비교 전/후 이벤트 훅.
+//!
+//! 기본 `LoggingHook`을 포함합니다.
 use std::time::SystemTime;
 
 use crate::compare::ProcDefinition;

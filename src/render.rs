@@ -1,3 +1,6 @@
+//! 출력 렌더러 레지스트리 스켈레톤.
+//!
+//! 포맷 렌더링을 플러그인 형태로 확장할 때 사용합니다.
 use anyhow::{anyhow, Result};
 
 use crate::compare::ProcDefinition;
