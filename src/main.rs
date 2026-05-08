@@ -1,11 +1,16 @@
 mod compare;
+mod cli;
 mod config;
+mod hooks;
 mod output;
+mod render;
 
 use std::collections::BTreeMap;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use hooks::{Hook, HookEvent, HookEventType, LoggingHook};
+use std::time::SystemTime;
 
 #[derive(Parser, Debug)]
 #[command(name = "dbgit")]
@@ -41,30 +46,41 @@ async fn run() -> Result<()> {
         let _ = dotenvy::from_filename(&args.dotenv);
     }
 
-    let env_list: Vec<String> = args
-        .envs
-        .split(',')
-        .map(|s| s.trim().to_uppercase())
-        .filter(|s| !s.is_empty())
-        .collect();
+    let env_list: Vec<String> = cli::parse_envs(&args.envs);
     let baseline = args.baseline.trim().to_uppercase();
-    if !env_list.contains(&baseline) {
-        bail!("baseline 환경이 envs 목록에 포함되어야 합니다.");
-    }
+    cli::validate_baseline(&env_list, &baseline)?;
 
-    let fmt = args.output.to_lowercase();
-    if !matches!(fmt.as_str(), "text" | "json" | "markdown") {
-        bail!("--output 은 text, json, markdown 중 하나여야 합니다.");
-    }
+    let fmt = cli::OutputFormat::parse(&args.output)?;
 
     let cfgs = config::load_env_configs(&env_list).context("환경 변수 로드")?;
+    let hooks: Vec<Box<dyn Hook>> = vec![Box::new(LoggingHook)];
+    let before = HookEvent {
+        kind: HookEventType::BeforeCompare,
+        at: SystemTime::now(),
+        envs: &cfgs,
+        proc_identifier: &args.proc,
+        results: None,
+    };
+    for h in &hooks {
+        h.on_event(&before);
+    }
     let defs: BTreeMap<String, compare::ProcDefinition> =
         compare::compare_across(&cfgs, &args.proc).await?;
+    let after = HookEvent {
+        kind: HookEventType::AfterCompare,
+        at: SystemTime::now(),
+        envs: &cfgs,
+        proc_identifier: &args.proc,
+        results: Some(&defs),
+    };
+    for h in &hooks {
+        h.on_event(&after);
+    }
 
-    match fmt.as_str() {
-        "json" => println!("{}", output::format_json(&baseline, &defs)?),
-        "markdown" => println!("{}", output::format_md(&baseline, &defs)),
-        _ => print!("{}", output::format_text(&baseline, &defs)),
+    match fmt {
+        cli::OutputFormat::Json => println!("{}", output::format_json(&baseline, &defs)?),
+        cli::OutputFormat::Markdown => println!("{}", output::format_md(&baseline, &defs)),
+        cli::OutputFormat::Text => print!("{}", output::format_text(&baseline, &defs)),
     }
     Ok(())
 }
