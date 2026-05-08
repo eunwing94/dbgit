@@ -1,5 +1,11 @@
 package com.dbgit.app;
 
+/**
+ * 애플리케이션 오케스트레이터.
+ *
+ * - 유스케이스 서비스 호출을 감싸고
+ * - 비교 전/후 Hook 이벤트를 발행합니다.
+ */
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

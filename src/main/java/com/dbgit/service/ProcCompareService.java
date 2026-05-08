@@ -1,5 +1,11 @@
 package com.dbgit.service;
 
+/**
+ * 비교 유스케이스(서비스).
+ *
+ * 각 환경에 대해 SQL Server에서 프로시저/함수 정의를 조회하고,
+ * 정규화된 정의를 포함한 도메인 모델을 생성합니다.
+ */
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

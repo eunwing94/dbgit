@@ -1,5 +1,11 @@
 package com.dbgit;
 
+/**
+ * 레거시 비교 API.
+ *
+ * 새 구조에서는 `com.dbgit.service.ProcCompareService` 사용을 권장합니다.
+ * (기존 호출부 호환을 위해 얇은 어댑터 형태로 유지)
+ */
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

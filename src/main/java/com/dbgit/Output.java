@@ -1,5 +1,11 @@
 package com.dbgit;
 
+/**
+ * 레거시 출력 포맷 유틸.
+ *
+ * 새 구조에서는 `com.dbgit.output.*Renderer`를 권장하지만,
+ * 호환을 위해 기존 출력 함수를 유지합니다.
+ */
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

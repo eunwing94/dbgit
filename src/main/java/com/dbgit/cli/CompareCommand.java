@@ -1,5 +1,12 @@
 package com.dbgit.cli;
 
+/**
+ * Picocli 서브커맨드 구현.
+ *
+ * - 입력 옵션 파싱 및 기본 검증
+ * - .env 로딩 후 환경별 접속 설정 생성
+ * - 애플리케이션 서비스 호출 및 렌더러 선택
+ */
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
