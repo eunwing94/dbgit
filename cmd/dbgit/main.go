@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/eunwing94/dbgit/internal/compare"
+	"github.com/eunwing94/dbgit/internal/cli"
 	"github.com/eunwing94/dbgit/internal/config"
 	"github.com/eunwing94/dbgit/internal/output"
 )
@@ -49,9 +50,9 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
 		_ = godotenv.Load(*dotenvPath)
 	}
 
-	envList := splitEnvs(*envsFlag)
+	envList := cli.ParseEnvs(*envsFlag)
 	baseline := strings.ToUpper(strings.TrimSpace(*baselineFlag))
-	if !contains(envList, baseline) {
+	if !cli.Contains(envList, baseline) {
 		fmt.Fprintln(os.Stderr, "baseline 환경이 envs 목록에 포함되어야 합니다.")
 		return 1
 	}
@@ -91,25 +92,4 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
 		fmt.Println(output.FormatText(baseline, defs))
 	}
 	return 0
-}
-
-func splitEnvs(s string) []string {
-	parts := strings.Split(s, ",")
-	var out []string
-	for _, p := range parts {
-		p = strings.ToUpper(strings.TrimSpace(p))
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-func contains(list []string, v string) bool {
-	for _, x := range list {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
