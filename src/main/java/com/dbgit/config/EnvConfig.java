@@ -1,4 +1,4 @@
-package com.dbgit;
+package com.dbgit.config;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -14,8 +14,19 @@ public record EnvConfig(
         String database
 ) {
     public static EnvConfig load(Dotenv dotenv, String envName) {
-        com.dbgit.config.EnvConfig c = com.dbgit.config.EnvConfig.load(dotenv, envName);
-        return new EnvConfig(c.name(), c.host(), c.port(), c.user(), c.password(), c.database());
+        String prefix = envName.toUpperCase(Locale.ROOT);
+        String host = require(dotenv, prefix + "_HOST", envName);
+        String portRaw = require(dotenv, prefix + "_PORT", envName);
+        int port;
+        try {
+            port = Integer.parseInt(portRaw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(envName + " PORT 형식 오류: " + portRaw);
+        }
+        String user = require(dotenv, prefix + "_USER", envName);
+        String password = require(dotenv, prefix + "_PASSWORD", envName);
+        String database = require(dotenv, prefix + "_DATABASE", envName);
+        return new EnvConfig(prefix, host, port, user, password, database);
     }
 
     private static String require(Dotenv dotenv, String key, String envLabel) {
@@ -31,3 +42,4 @@ public record EnvConfig(
         return Objects.requireNonNullElse(b, "");
     }
 }
+
