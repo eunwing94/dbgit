@@ -6,13 +6,9 @@ import dotenv from "dotenv";
 import { DEFAULT_ENVS, loadEnvConfigs } from "./config.js";
 import { compareAcrossEnvs } from "./compare.js";
 import { formatProcComparison, type OutputFormat } from "./outputFormat.js";
-
-function parseEnvList(s: string): string[] {
-  return s
-    .split(",")
-    .map((x) => x.trim().toUpperCase())
-    .filter(Boolean);
-}
+import { parseEnvList, requireBaselineIncluded } from "./cli/envs.js";
+import { LoggingHook } from "./hooks/hook.js";
+import type { HookEvent } from "./hooks/events.js";
 
 async function main(): Promise<number> {
   const program = new Command();
@@ -43,8 +39,10 @@ async function main(): Promise<number> {
 
   const envList = parseEnvList(opts.envs);
   const baseline = opts.baseline.trim().toUpperCase();
-  if (!envList.includes(baseline)) {
-    console.error("baseline 환경이 envs 목록에 포함되어야 합니다.");
+  try {
+    requireBaselineIncluded(envList, baseline);
+  } catch (e) {
+    console.error((e as Error).message);
     return 1;
   }
 
@@ -56,7 +54,23 @@ async function main(): Promise<number> {
 
   try {
     const configs = loadEnvConfigs(envList);
+    const hooks = [new LoggingHook()];
+    const before: HookEvent = {
+      type: "before_compare",
+      at: new Date().toISOString(),
+      envs: configs,
+      proc: procArg,
+    };
+    for (const h of hooks) h.onEvent(before);
     const definitions = await compareAcrossEnvs(configs, procArg);
+    const after: HookEvent = {
+      type: "after_compare",
+      at: new Date().toISOString(),
+      envs: configs,
+      proc: procArg,
+      results: definitions,
+    };
+    for (const h of hooks) h.onEvent(after);
     console.log(formatProcComparison(baseline, definitions, out));
     return 0;
   } catch (e) {

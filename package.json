@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dbgit": "node dist/cli.js"
+    "dbgit": "node dist/cli.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"
