@@ -85,14 +85,15 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
         if (File.Exists(parsed.Dotenv))
             Env.Load(parsed.Dotenv);
 
-        var envList = parsed.Envs
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => s.ToUpperInvariant())
-            .ToList();
+        var envList = Cli.EnvList.Parse(parsed.Envs);
         var baseline = parsed.Baseline.ToUpperInvariant();
-        if (!envList.Contains(baseline))
+        try
         {
-            Console.Error.WriteLine("baseline 환경이 envs 목록에 포함되어야 합니다.");
+            Cli.EnvList.RequireContains(envList, baseline);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
             return 1;
         }
 
@@ -106,7 +107,14 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
         try
         {
             var configs = ConfigLoader.LoadEnvConfigs(envList);
+            var hooks = new List<Hooks.IHook> { new Hooks.LoggingHook() };
+            foreach (var h in hooks)
+                h.OnEvent(new Hooks.HookEvent(Hooks.HookEventType.BeforeCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, null));
+
             var definitions = await Compare.CompareAcrossEnvsAsync(configs, parsed.Proc).ConfigureAwait(false);
+            foreach (var h in hooks)
+                h.OnEvent(new Hooks.HookEvent(Hooks.HookEventType.AfterCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, definitions));
+
             Console.WriteLine(OutputFormat.Format(baseline, definitions, fmt));
             return 0;
         }

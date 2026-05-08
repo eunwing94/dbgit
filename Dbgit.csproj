@@ -12,4 +12,8 @@
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="CHANGELOG.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 </Project>
