@@ -3,3 +3,18 @@ __pycache__/
 .venv/
 *.pyc
 .pytest_cache/
+
+# Java / Maven
+target/
+dependency-reduced-pom.xml
+
+# 로컬 실행 JAR/바이너리 (루트에 복사해 쓸 때)
+/dbgit
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
