@@ -1,5 +1,0 @@
-pyodbc
-python-dotenv
-streamlit
-pandas
-openpyxl
