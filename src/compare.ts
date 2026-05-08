@@ -1,3 +1,8 @@
+/**
+ * 비교 유스케이스.
+ *
+ * SQL Server에서 모듈 정의를 읽어 정규화/해시하여 SAME/DIFF를 판정합니다.
+ */
 import crypto from "node:crypto";
 import sql from "mssql";
 import type { EnvConfig } from "./config.js";

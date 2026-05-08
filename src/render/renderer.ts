@@ -1,3 +1,8 @@
+/**
+ * 렌더러 레지스트리(플러그인) 스켈레톤.
+ *
+ * 출력 포맷별 렌더러를 등록/조회합니다.
+ */
 import type { ProcDefinition } from "../compare.js";
 
 export type RendererId = "text" | "json" | "markdown";

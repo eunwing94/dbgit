@@ -1,3 +1,6 @@
+/**
+ * 훅 인터페이스 및 기본 구현.
+ */
 import type { HookEvent } from "./events.js";
 
 export interface Hook {

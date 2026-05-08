@@ -1,3 +1,8 @@
+/**
+ * 출력 포맷(text/json/markdown).
+ *
+ * 비교 결과를 사람이 보기 좋게 렌더링합니다.
+ */
 import type { ProcDefinition } from "./compare.js";
 import { digestOf } from "./compare.js";
 

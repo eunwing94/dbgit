@@ -1,5 +1,8 @@
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
+/**
+ * SQL Server 접속/재시도 유틸.
+ */
 import sql from "mssql";
 import type { EnvConfig } from "./config.js";
 

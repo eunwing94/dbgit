@@ -1,3 +1,8 @@
+/**
+ * 훅 이벤트 타입 정의.
+ *
+ * 비교 전/후 시점에 전달할 컨텍스트를 정의합니다.
+ */
 import type { ProcDefinition } from "../compare.js";
 import type { EnvConfig } from "../config.js";
 

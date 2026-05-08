@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+/**
+ * dbgit CLI 엔트리포인트.
+ *
+ * - Commander 기반 옵션 파싱
+ * - .env 로딩 및 환경 설정 로딩
+ * - 비교 유스케이스 호출 및 출력 포맷 선택
+ */
 import fs from "node:fs";
 import process from "node:process";
 import { Command } from "commander";

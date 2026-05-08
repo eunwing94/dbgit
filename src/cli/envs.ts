@@ -1,3 +1,6 @@
+/**
+ * CLI 입력 파싱/검증 유틸.
+ */
 export function parseEnvList(s: string): string[] {
   return (s ?? "")
     .split(",")
