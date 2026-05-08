@@ -1,3 +1,6 @@
+// 출력 포맷(text/json/markdown).
+//
+// 비교 결과를 사람이 보기 좋게 렌더링합니다.
 using System.Text.Json;
 
 namespace Dbgit;

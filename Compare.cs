@@ -3,6 +3,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 
+// 비교 유스케이스.
+//
+// 각 환경에서 프로시저/함수 정의를 조회하고 정규화+해시로 SAME/DIFF를 판정합니다.
 namespace Dbgit;
 
 public sealed record ProcDefinition(

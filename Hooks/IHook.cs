@@ -1,3 +1,4 @@
+// 훅 인터페이스 및 기본 구현.
 namespace Dbgit.Hooks;
 
 public interface IHook

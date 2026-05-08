@@ -1,3 +1,6 @@
+// 환경별 DB 접속 설정 로딩.
+//
+// `.env`/환경변수에서 `{ENV}_HOST` 등의 키를 읽어 `EnvConfig`로 변환합니다.
 namespace Dbgit;
 
 public sealed record EnvConfig(

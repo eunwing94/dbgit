@@ -1,3 +1,4 @@
+// CLI 입력 파싱/검증 유틸.
 namespace Dbgit.Cli;
 
 public static class EnvList

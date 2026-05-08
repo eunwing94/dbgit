@@ -1,5 +1,8 @@
 using Microsoft.Data.SqlClient;
 
+// SQL Server 접속/조회 레이어.
+//
+// 재시도 정책 및 프로시저/함수 정의 조회 쿼리를 담당합니다.
 namespace Dbgit;
 
 public static class Db

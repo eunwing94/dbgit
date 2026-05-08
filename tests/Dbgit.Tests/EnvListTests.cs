@@ -1,3 +1,4 @@
+// CLI 파싱 유틸 테스트.
 using Dbgit.Cli;
 
 namespace Dbgit.Tests;

@@ -1,3 +1,8 @@
+// dbgit CLI 엔트리포인트.
+//
+// - 옵션 파싱 및 입력 검증
+// - .env 로딩 및 환경 설정 생성
+// - 비교 유스케이스 호출 및 출력 선택
 using DotNetEnv;
 
 namespace Dbgit;
