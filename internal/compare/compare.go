@@ -1,3 +1,6 @@
+// 비교 유스케이스.
+//
+// 각 환경에서 프로시저/함수 정의를 조회한 뒤 정규화+해시로 SAME/DIFF를 판정합니다.
 package compare
 
 import (
