@@ -7,7 +7,6 @@ package com.dbgit.app;
  * - 비교 전/후 Hook 이벤트를 발행합니다.
  */
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -20,24 +19,18 @@ import com.dbgit.service.ProcCompareService;
 public final class DbgitApp {
 
     private final ProcCompareService service;
-    private final List<Hook> hooks;
+    private final HookPipeline hookPipeline;
 
-    public DbgitApp(ProcCompareService service, List<Hook> hooks) {
+    public DbgitApp(ProcCompareService service, HookPipeline hookPipeline) {
         this.service = Objects.requireNonNull(service, "service");
-        this.hooks = List.copyOf(hooks == null ? List.of() : hooks);
+        this.hookPipeline = Objects.requireNonNull(hookPipeline, "hookPipeline");
     }
 
     public Map<String, ProcDefinition> compareAll(List<EnvConfig> envs, String procIdentifier) {
-        fire(HookEvent.beforeCompare(envs, procIdentifier));
+        hookPipeline.run(HookEvent.beforeCompare(envs, procIdentifier));
         Map<String, ProcDefinition> out = new LinkedHashMap<>(service.compareAll(envs, procIdentifier));
-        fire(HookEvent.afterCompare(envs, procIdentifier, out));
+        hookPipeline.run(HookEvent.afterCompare(envs, procIdentifier, out));
         return out;
-    }
-
-    private void fire(HookEvent e) {
-        for (Hook h : hooks) {
-            h.onEvent(e);
-        }
     }
 }
 
