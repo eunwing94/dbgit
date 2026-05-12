@@ -1,7 +1,4 @@
-// 출력 포맷(text/json/markdown) 모음.
-//
-// 비교 결과를 사람이 보기 좋게 렌더링합니다.
-package output
+package render
 
 import (
 	"encoding/json"
@@ -9,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/eunwing94/dbgit/internal/compare"
+	"github.com/eunwing94/dbgit/internal/domain"
 )
 
-func diffEnvNames(baseline string, defs map[string]compare.ProcDefinition) []string {
+func diffEnvNames(baseline string, defs map[string]domain.ProcDefinition) []string {
 	baseDigest := defs[baseline].Digest()
 	var names []string
 	for k, v := range defs {
@@ -24,8 +21,21 @@ func diffEnvNames(baseline string, defs map[string]compare.ProcDefinition) []str
 	return names
 }
 
-// FormatText 텍스트 출력.
-func FormatText(baseline string, defs map[string]compare.ProcDefinition) string {
+func sortedKeys(defs map[string]domain.ProcDefinition) []string {
+	keys := make([]string, 0, len(defs))
+	for k := range defs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// TextRenderer 텍스트 출력.
+type TextRenderer struct{}
+
+func (TextRenderer) Kind() Kind { return KindText }
+
+func (TextRenderer) Render(baseline string, defs map[string]domain.ProcDefinition) (string, error) {
 	b := defs[baseline]
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("기준 환경: %s (%s)\n\n", baseline, b.FullName()))
@@ -46,16 +56,16 @@ func FormatText(baseline string, defs map[string]compare.ProcDefinition) string 
 	} else {
 		sb.WriteString("모든 환경이 동일합니다.")
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 type envEntry struct {
-	ObjectID        int    `json:"object_id"`
-	SchemaName      string `json:"schema_name"`
-	Name            string `json:"name"`
-	FullName        string `json:"full_name"`
-	Digest          string `json:"digest"`
-	SameAsBaseline  bool   `json:"same_as_baseline"`
+	ObjectID       int    `json:"object_id"`
+	SchemaName     string `json:"schema_name"`
+	Name           string `json:"name"`
+	FullName       string `json:"full_name"`
+	Digest         string `json:"digest"`
+	SameAsBaseline bool   `json:"same_as_baseline"`
 }
 
 type defWithBody struct {
@@ -67,8 +77,12 @@ type defWithBody struct {
 	Definition string `json:"definition"`
 }
 
-// FormatJSON JSON 출력.
-func FormatJSON(baseline string, defs map[string]compare.ProcDefinition) (string, error) {
+// JSONRenderer JSON 출력.
+type JSONRenderer struct{}
+
+func (JSONRenderer) Kind() Kind { return KindJSON }
+
+func (JSONRenderer) Render(baseline string, defs map[string]domain.ProcDefinition) (string, error) {
 	baseDigest := defs[baseline].Digest()
 	envs := make(map[string]envEntry, len(defs))
 	defBodies := make(map[string]defWithBody, len(defs))
@@ -92,11 +106,11 @@ func FormatJSON(baseline string, defs map[string]compare.ProcDefinition) (string
 	}
 	diff := diffEnvNames(baseline, defs)
 	payload := map[string]any{
-		"baseline":               baseline,
-		"target_full_name":       defs[baseline].FullName(),
-		"environments":           envs,
-		"diff_environment_names": diff,
-		"all_same":               len(diff) == 0,
+		"baseline":                 baseline,
+		"target_full_name":         defs[baseline].FullName(),
+		"environments":             envs,
+		"diff_environment_names":   diff,
+		"all_same":                 len(diff) == 0,
 		"definitions_with_body":  defBodies,
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
@@ -106,8 +120,12 @@ func FormatJSON(baseline string, defs map[string]compare.ProcDefinition) (string
 	return string(b), nil
 }
 
-// FormatMarkdown 마크다운 출력.
-func FormatMarkdown(baseline string, defs map[string]compare.ProcDefinition) string {
+// MarkdownRenderer 마크다운 출력.
+type MarkdownRenderer struct{}
+
+func (MarkdownRenderer) Kind() Kind { return KindMarkdown }
+
+func (MarkdownRenderer) Render(baseline string, defs map[string]domain.ProcDefinition) (string, error) {
 	b := defs[baseline]
 	var sb strings.Builder
 	sb.WriteString("## 프로시저·함수 비교 결과\n\n")
@@ -129,14 +147,5 @@ func FormatMarkdown(baseline string, defs map[string]compare.ProcDefinition) str
 	} else {
 		sb.WriteString("**모든 환경이 동일합니다.**")
 	}
-	return sb.String()
-}
-
-func sortedKeys(defs map[string]compare.ProcDefinition) []string {
-	keys := make([]string, 0, len(defs))
-	for k := range defs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return sb.String(), nil
 }

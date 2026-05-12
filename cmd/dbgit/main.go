@@ -1,12 +1,11 @@
 // dbgit CLI 엔트리포인트.
 //
-// - 플래그 파싱 및 기본 검증
-// - .env 로딩 및 환경별 설정 생성
-// - 비교 유스케이스 호출 및 출력 포맷 선택
+// - 플래그 파싱 → 검증 → 설정 로드 → 서비스(저장소) → 훅 파이프라인 → 렌더 레지스트리
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,14 +14,25 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/eunwing94/dbgit/internal/compare"
 	"github.com/eunwing94/dbgit/internal/cli"
 	"github.com/eunwing94/dbgit/internal/config"
-	"github.com/eunwing94/dbgit/internal/output"
+	dbgerrors "github.com/eunwing94/dbgit/internal/errors"
+	"github.com/eunwing94/dbgit/internal/hooks"
+	"github.com/eunwing94/dbgit/internal/render"
+	"github.com/eunwing94/dbgit/internal/repository"
+	"github.com/eunwing94/dbgit/internal/service"
 )
 
 func main() {
 	os.Exit(run())
+}
+
+func userMsg(err error) string {
+	var de *dbgerrors.Error
+	if errors.As(err, &de) {
+		return de.Error()
+	}
+	return err.Error()
 }
 
 func run() int {
@@ -58,13 +68,13 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
 	envList := cli.ParseEnvs(*envsFlag)
 	baseline := strings.ToUpper(strings.TrimSpace(*baselineFlag))
 	if !cli.Contains(envList, baseline) {
-		fmt.Fprintln(os.Stderr, "baseline 환경이 envs 목록에 포함되어야 합니다.")
+		fmt.Fprintln(os.Stderr, dbgerrors.New(dbgerrors.InvalidArgument, "baseline 환경이 envs 목록에 포함되어야 합니다.").Error())
 		return 1
 	}
 
-	fmtNorm := strings.ToLower(strings.TrimSpace(*outputFmt))
-	if fmtNorm != "text" && fmtNorm != "json" && fmtNorm != "markdown" {
-		fmt.Fprintln(os.Stderr, "output은 text, json, markdown 중 하나여야 합니다.")
+	kind, err := render.ParseKind(*outputFmt)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, userMsg(err))
 		return 1
 	}
 
@@ -77,24 +87,40 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	defs, err := compare.CompareAcrossEnvs(ctx, cfgList, proc)
+	svc := &service.CompareService{Repo: repository.SQLProcRepository{}}
+	pipe := hooks.NewPipeline(hooks.LoggingHook{})
+	pipe.Run(hooks.Event{
+		Type: hooks.BeforeCompare,
+		At:   time.Now(),
+		Envs: cfgList,
+		Proc: proc,
+	})
+
+	defs, err := svc.CompareAcrossEnvs(ctx, cfgList, proc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "오류: %v\n", userMsg(err))
+		return 1
+	}
+
+	pipe.Run(hooks.Event{
+		Type:    hooks.AfterCompare,
+		At:      time.Now(),
+		Envs:    cfgList,
+		Proc:    proc,
+		Results: defs,
+	})
+
+	reg := render.NewRegistry()
+	renderer, err := reg.Get(kind)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, userMsg(err))
+		return 1
+	}
+	out, err := renderer.Render(baseline, defs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return 1
 	}
-
-	switch fmtNorm {
-	case "json":
-		s, err := output.FormatJSON(baseline, defs)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "오류: %v\n", err)
-			return 1
-		}
-		fmt.Println(s)
-	case "markdown":
-		fmt.Println(output.FormatMarkdown(baseline, defs))
-	default:
-		fmt.Println(output.FormatText(baseline, defs))
-	}
+	fmt.Println(out)
 	return 0
 }

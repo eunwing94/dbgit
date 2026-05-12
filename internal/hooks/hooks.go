@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/eunwing94/dbgit/internal/config"
-	"github.com/eunwing94/dbgit/internal/compare"
+	"github.com/eunwing94/dbgit/internal/domain"
 )
 
 type EventType string
@@ -17,15 +17,15 @@ const (
 	AfterCompare  EventType = "after_compare"
 )
 
+// Event 훅에 전달되는 컨텍스트.
 type Event struct {
-	Type      EventType
-	At        time.Time
-	Envs      []config.EnvConfig
-	Proc      string
-	Results   map[string]compare.ProcDefinition
+	Type    EventType
+	At      time.Time
+	Envs    []config.EnvConfig
+	Proc    string
+	Results map[string]domain.ProcDefinition
 }
 
 type Hook interface {
 	OnEvent(e Event)
 }
-
