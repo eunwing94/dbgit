@@ -1,4 +1,6 @@
-// 비교 전/후 훅 이벤트 모델.
+using Dbgit.Config;
+using Dbgit.Domain;
+
 namespace Dbgit.Hooks;
 
 public enum HookEventType

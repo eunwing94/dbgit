@@ -1,5 +1,6 @@
 // CLI 파싱 유틸 테스트.
 using Dbgit.Cli;
+using Dbgit.Errors;
 
 namespace Dbgit.Tests;
 
@@ -16,7 +17,7 @@ public class EnvListTests
     public void RequireContains_Throws_WhenMissing()
     {
         var envs = new List<string> { "PRD", "STG" };
-        Assert.Throws<ArgumentException>(() => EnvList.RequireContains(envs, "DEV"));
+        Assert.Throws<DbgitException>(() => EnvList.RequireContains(envs, "DEV"));
     }
 }
 

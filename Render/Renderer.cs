@@ -1,4 +1,5 @@
-// 렌더러 레지스트리(플러그인) 스켈레톤.
+using Dbgit.Domain;
+
 namespace Dbgit.Render;
 
 public enum OutputKind

@@ -1,18 +1,22 @@
 using Microsoft.Data.SqlClient;
+using Dbgit.Config;
 
-// SQL Server 접속/조회 레이어.
-//
-// 재시도 정책 및 프로시저/함수 정의 조회 쿼리를 담당합니다.
-namespace Dbgit;
+namespace Dbgit.Db;
 
-public static class Db
+/// <summary>재시도 포함 SQL 연결 팩토리.</summary>
+public interface ISqlConnectionFactory
+{
+    Task<SqlConnection> OpenAsync(EnvConfig cfg, CancellationToken ct = default);
+}
+
+public sealed class SqlConnectionFactory : ISqlConnectionFactory
 {
     private const string RetriesEnv = "DBGIT_DB_MAX_RETRIES";
     private const string DelayEnv = "DBGIT_DB_RETRY_DELAY_SEC";
 
-    public static string BuildConnectionString(EnvConfig c) =>
-        $"Server=tcp:{c.Host},{c.Port};Database={c.Database};User Id={c.User};Password={c.Password};"
-        + "Encrypt=True;TrustServerCertificate=True;Connection Timeout=5;";
+    private readonly IConnectionStringBuilder _cs;
+
+    public SqlConnectionFactory(IConnectionStringBuilder cs) => _cs = cs;
 
     private static (int Max, double DelaySec) RetryParams()
     {
@@ -22,7 +26,7 @@ public static class Db
         return (max, delay);
     }
 
-    public static async Task<SqlConnection> ConnectWithRetryAsync(EnvConfig cfg, CancellationToken ct = default)
+    public async Task<SqlConnection> OpenAsync(EnvConfig cfg, CancellationToken ct = default)
     {
         var (maxAttempts, delaySec) = RetryParams();
         Exception? last = null;
@@ -31,7 +35,7 @@ public static class Db
         {
             try
             {
-                var conn = new SqlConnection(BuildConnectionString(cfg));
+                var conn = new SqlConnection(_cs.Build(cfg));
                 await conn.OpenAsync(ct).ConfigureAwait(false);
                 return conn;
             }

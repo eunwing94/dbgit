@@ -1,22 +1,13 @@
-// 출력 포맷(text/json/markdown).
-//
-// 비교 결과를 사람이 보기 좋게 렌더링합니다.
 using System.Text.Json;
+using Dbgit.Domain;
 
-namespace Dbgit;
+namespace Dbgit.Render;
 
-public static class OutputFormat
+public sealed class TextRenderer : IRenderer
 {
-    private static List<string> DiffEnvNames(string baseline, Dictionary<string, ProcDefinition> definitions)
-    {
-        var baseDigest = definitions[baseline].Digest();
-        return definitions
-            .Where(kv => kv.Value.Digest() != baseDigest)
-            .Select(kv => kv.Key)
-            .ToList();
-    }
+    public OutputKind Kind => OutputKind.Text;
 
-    public static string FormatText(string baseline, Dictionary<string, ProcDefinition> definitions)
+    public string Render(string baseline, Dictionary<string, ProcDefinition> definitions)
     {
         var baseDef = definitions[baseline];
         var sb = new StringBuilder();
@@ -45,7 +36,21 @@ public static class OutputFormat
         return sb.ToString().TrimEnd();
     }
 
-    public static string FormatJson(string baseline, Dictionary<string, ProcDefinition> definitions)
+    private static List<string> DiffEnvNames(string baseline, Dictionary<string, ProcDefinition> definitions)
+    {
+        var baseDigest = definitions[baseline].Digest();
+        return definitions
+            .Where(kv => kv.Value.Digest() != baseDigest)
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+}
+
+public sealed class JsonRenderer : IRenderer
+{
+    public OutputKind Kind => OutputKind.Json;
+
+    public string Render(string baseline, Dictionary<string, ProcDefinition> definitions)
     {
         var baseDigest = definitions[baseline].Digest();
         var envEntries = definitions.ToDictionary(
@@ -86,7 +91,21 @@ public static class OutputFormat
         return JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    public static string FormatMarkdown(string baseline, Dictionary<string, ProcDefinition> definitions)
+    private static List<string> DiffEnvNames(string baseline, Dictionary<string, ProcDefinition> definitions)
+    {
+        var baseDigest = definitions[baseline].Digest();
+        return definitions
+            .Where(kv => kv.Value.Digest() != baseDigest)
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+}
+
+public sealed class MarkdownRenderer : IRenderer
+{
+    public OutputKind Kind => OutputKind.Markdown;
+
+    public string Render(string baseline, Dictionary<string, ProcDefinition> definitions)
     {
         var baseDef = definitions[baseline];
         var lines = new List<string>
@@ -114,11 +133,12 @@ public static class OutputFormat
         return string.Join(Environment.NewLine, lines);
     }
 
-    public static string Format(string baseline, Dictionary<string, ProcDefinition> definitions, string fmt) =>
-        fmt.ToLowerInvariant() switch
-        {
-            "json" => FormatJson(baseline, definitions),
-            "markdown" => FormatMarkdown(baseline, definitions),
-            _ => FormatText(baseline, definitions),
-        };
+    private static List<string> DiffEnvNames(string baseline, Dictionary<string, ProcDefinition> definitions)
+    {
+        var baseDigest = definitions[baseline].Digest();
+        return definitions
+            .Where(kv => kv.Value.Digest() != baseDigest)
+            .Select(kv => kv.Key)
+            .ToList();
+    }
 }

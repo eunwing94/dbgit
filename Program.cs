@@ -1,9 +1,15 @@
 // dbgit CLI 엔트리포인트.
 //
-// - 옵션 파싱 및 입력 검증
-// - .env 로딩 및 환경 설정 생성
-// - 비교 유스케이스 호출 및 출력 선택
+// - 옵션 파싱 → 검증 레이어 → 설정 로드 → 서비스(저장소/DB) → 훅 파이프라인 → 렌더러 레지스트리
 using DotNetEnv;
+using Dbgit.Cli;
+using Dbgit.Config;
+using Dbgit.Db;
+using Dbgit.Errors;
+using Dbgit.Hooks;
+using Dbgit.Render;
+using Dbgit.Service;
+using Dbgit.Validation;
 
 namespace Dbgit;
 
@@ -87,45 +93,58 @@ proc    프로시저/함수 object_id 또는 이름 (schema.name 권장)
         if (parsed is null)
             return 1;
 
+        var cli = new CliOptions(parsed.Proc, parsed.Envs, parsed.Baseline, parsed.Dotenv, parsed.Output);
+        try
+        {
+            CliOptionsValidator.Validate(cli);
+        }
+        catch (DbgitException ex)
+        {
+            Console.Error.WriteLine(ExceptionMapper.ToUserMessage(ex));
+            return 1;
+        }
+
         if (File.Exists(parsed.Dotenv))
             Env.Load(parsed.Dotenv);
 
-        var envList = Cli.EnvList.Parse(parsed.Envs);
+        var envList = EnvList.Parse(parsed.Envs);
         var baseline = parsed.Baseline.ToUpperInvariant();
         try
         {
-            Cli.EnvList.RequireContains(envList, baseline);
+            EnvList.RequireContains(envList, baseline);
         }
-        catch (Exception ex)
+        catch (DbgitException ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine(ExceptionMapper.ToUserMessage(ex));
             return 1;
         }
 
-        var fmt = parsed.Output.ToLowerInvariant();
-        if (fmt is not ("text" or "json" or "markdown"))
-        {
-            Console.Error.WriteLine("output은 text, json, markdown 중 하나여야 합니다.");
-            return 1;
-        }
+        var outputKind = RendererRegistryFactory.ParseOutputKind(CliOptionsValidator.NormalizedOutput(cli));
+        var renderers = RendererRegistryFactory.CreateDefault();
+
+        var csBuilder = new SqlConnectionStringBuilder();
+        var connectionFactory = new SqlConnectionFactory(csBuilder);
+        var repository = new SqlProcDefinitionRepository(connectionFactory);
+        var compareService = new ProcCompareService(repository);
+
+        var hookPipeline = new HookPipeline(new IHook[] { new LoggingHook() });
 
         try
         {
             var configs = ConfigLoader.LoadEnvConfigs(envList);
-            var hooks = new List<Hooks.IHook> { new Hooks.LoggingHook() };
-            foreach (var h in hooks)
-                h.OnEvent(new Hooks.HookEvent(Hooks.HookEventType.BeforeCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, null));
+            hookPipeline.Run(new HookEvent(HookEventType.BeforeCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, null));
 
-            var definitions = await Compare.CompareAcrossEnvsAsync(configs, parsed.Proc).ConfigureAwait(false);
-            foreach (var h in hooks)
-                h.OnEvent(new Hooks.HookEvent(Hooks.HookEventType.AfterCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, definitions));
+            var definitions = await compareService.CompareAcrossAsync(configs, parsed.Proc).ConfigureAwait(false);
 
-            Console.WriteLine(OutputFormat.Format(baseline, definitions, fmt));
+            hookPipeline.Run(new HookEvent(HookEventType.AfterCompare, DateTimeOffset.UtcNow, configs, parsed.Proc, definitions));
+
+            var rendered = renderers.Get(outputKind).Render(baseline, definitions);
+            Console.WriteLine(rendered);
             return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"오류: {ex.Message}");
+            Console.Error.WriteLine($"오류: {ExceptionMapper.ToUserMessage(ex)}");
             return 1;
         }
     }
