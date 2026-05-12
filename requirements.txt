@@ -4,3 +4,4 @@ streamlit
 pandas
 openpyxl
 pypdf>=4.0
+cryptography>=3.1
