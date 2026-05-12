@@ -8,7 +8,7 @@ from typing import Dict, List
 from dotenv import load_dotenv
 
 from .compare import compare_across_envs
-from .config import EnvConfig, load_env_config
+from .services.env import load_env_configs
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -35,13 +35,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="환경변수 파일 경로 (기본: .env)",
     )
     return parser
-
-
-def _load_envs(env_list: List[str]) -> List[EnvConfig]:
-    configs: List[EnvConfig] = []
-    for env_name in env_list:
-        configs.append(load_env_config(env_name))
-    return configs
 
 
 def _format_result(baseline: str, definitions: Dict[str, object]) -> str:
@@ -81,7 +74,7 @@ def main(argv: List[str] | None = None) -> int:
         parser.error("baseline 환경이 envs 목록에 포함되어야 합니다.")
 
     try:
-        configs = _load_envs(env_list)
+        configs = load_env_configs(env_list)
         definitions = compare_across_envs(configs, args.proc)
     except Exception as exc:
         print(f"오류: {exc}", file=sys.stderr)
