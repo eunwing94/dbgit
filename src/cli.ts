@@ -14,7 +14,7 @@ import { DEFAULT_ENVS, loadEnvConfigs } from "./config.js";
 import { compareAcrossEnvs } from "./compare.js";
 import { formatProcComparison, type OutputFormat } from "./outputFormat.js";
 import { parseEnvList, requireBaselineIncluded } from "./cli/envs.js";
-import { LoggingHook } from "./hooks/hook.js";
+import { createDefaultHookPipeline } from "./factory.js";
 import type { HookEvent } from "./hooks/events.js";
 
 async function main(): Promise<number> {
@@ -61,14 +61,14 @@ async function main(): Promise<number> {
 
   try {
     const configs = loadEnvConfigs(envList);
-    const hooks = [new LoggingHook()];
+    const pipeline = createDefaultHookPipeline();
     const before: HookEvent = {
       type: "before_compare",
       at: new Date().toISOString(),
       envs: configs,
       proc: procArg,
     };
-    for (const h of hooks) h.onEvent(before);
+    pipeline.run(before);
     const definitions = await compareAcrossEnvs(configs, procArg);
     const after: HookEvent = {
       type: "after_compare",
@@ -77,7 +77,7 @@ async function main(): Promise<number> {
       proc: procArg,
       results: definitions,
     };
-    for (const h of hooks) h.onEvent(after);
+    pipeline.run(after);
     console.log(formatProcComparison(baseline, definitions, out));
     return 0;
   } catch (e) {
