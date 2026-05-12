@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import replace
 from typing import List
 
 from dotenv import load_dotenv
@@ -12,6 +13,8 @@ from dotenv import load_dotenv
 from .compare import compare_across_envs
 from .config import load_env_configs
 from .constants import DEFAULT_ENVS
+from .factory import create_default_hook_pipeline
+from .hooks import HookContext, HookEventType
 from .logging_setup import configure_logging
 from .output_format import OutputFormat, format_proc_comparison
 
@@ -62,12 +65,25 @@ def main(argv: List[str] | None = None) -> int:
     if baseline not in env_list:
         parser.error("baseline 환경이 envs 목록에 포함되어야 합니다.")
 
+    pipeline = create_default_hook_pipeline()
+    hook_ctx = HookContext(
+        proc_identifier=args.proc,
+        env_names=tuple(env_list),
+        baseline=baseline,
+    )
+    pipeline.run(HookEventType.BEFORE_COMPARE, hook_ctx)
+
     try:
         configs = load_env_configs(env_list)
         definitions = compare_across_envs(configs, args.proc)
     except Exception as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
+
+    pipeline.run(
+        HookEventType.AFTER_COMPARE,
+        replace(hook_ctx, definitions=definitions),
+    )
 
     out: OutputFormat = args.output
     text = format_proc_comparison(baseline, definitions, out)
