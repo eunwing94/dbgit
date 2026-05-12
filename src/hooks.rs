@@ -49,3 +49,20 @@ impl Hook for LoggingHook {
     }
 }
 
+/// 등록된 훅을 순서대로 실행하는 미들웨어.
+pub struct HookPipeline {
+    hooks: Vec<Box<dyn Hook>>,
+}
+
+impl HookPipeline {
+    pub fn new(hooks: Vec<Box<dyn Hook>>) -> Self {
+        Self { hooks }
+    }
+
+    pub fn run(&self, e: &HookEvent<'_>) {
+        for h in &self.hooks {
+            h.on_event(e);
+        }
+    }
+}
+

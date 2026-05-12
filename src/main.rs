@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use hooks::{Hook, HookEvent, HookEventType, LoggingHook};
+use hooks::{HookEvent, HookEventType, HookPipeline, LoggingHook};
 use std::time::SystemTime;
 
 #[derive(Parser, Debug)]
@@ -58,7 +58,7 @@ async fn run() -> Result<()> {
     let fmt = cli::OutputFormat::parse(&args.output)?;
 
     let cfgs = config::load_env_configs(&env_list).context("환경 변수 로드")?;
-    let hooks: Vec<Box<dyn Hook>> = vec![Box::new(LoggingHook)];
+    let pipeline = HookPipeline::new(vec![Box::new(LoggingHook)]);
     let before = HookEvent {
         kind: HookEventType::BeforeCompare,
         at: SystemTime::now(),
@@ -66,9 +66,7 @@ async fn run() -> Result<()> {
         proc_identifier: &args.proc,
         results: None,
     };
-    for h in &hooks {
-        h.on_event(&before);
-    }
+    pipeline.run(&before);
     let defs: BTreeMap<String, compare::ProcDefinition> =
         compare::compare_across(&cfgs, &args.proc).await?;
     let after = HookEvent {
@@ -78,9 +76,7 @@ async fn run() -> Result<()> {
         proc_identifier: &args.proc,
         results: Some(&defs),
     };
-    for h in &hooks {
-        h.on_event(&after);
-    }
+    pipeline.run(&after);
 
     match fmt {
         cli::OutputFormat::Json => println!("{}", output::format_json(&baseline, &defs)?),
