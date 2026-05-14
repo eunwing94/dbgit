@@ -39,10 +39,20 @@ def _load_configs(envs: List[str]) -> List[EnvConfig]:
     return configs
 
 
-def _render_results(baseline: str, definitions: Dict[str, object]) -> None:
+def _render_results(baseline: str, definitions: Dict[str, object], object_kind: str = "routine") -> None:
     base_def = definitions[baseline]
     st.subheader("비교 결과")
     st.caption(f"기준 환경: {baseline} ({base_def.full_name})")
+
+    labels = {
+        "routine": ("환경별 프로시저·함수 정의", "차이 상세 (공백/빈줄 무시)"),
+        "view": ("환경별 뷰 정의", "차이 상세 (공백/빈줄 무시)"),
+        "table": (
+            "환경별 테이블 컬럼 스키마 (컬럼별 파이프 구분)",
+            "차이 상세 (컬럼 줄 단위, 공백 무시)",
+        ),
+    }
+    exp_def_title, exp_diff_title = labels.get(object_kind, labels["routine"])
 
     rows = []
     for env_name, proc_def in definitions.items():
@@ -65,14 +75,14 @@ def _render_results(baseline: str, definitions: Dict[str, object]) -> None:
     else:
         st.success("모든 환경이 동일합니다.")
 
-    with st.expander("환경별 프로시저 정의 보기"):
+    with st.expander(exp_def_title):
         for env_name, proc_def in definitions.items():
             st.markdown(f"**{env_name}** ({proc_def.full_name})")
             st.text_area(
                 label=f"{env_name} definition",
                 value=proc_def.definition or "",
                 height=200,
-                key=f"def_{env_name}",
+                key=f"def_{env_name}_{object_kind}",
             )
 
     diff_envs = [
@@ -81,7 +91,7 @@ def _render_results(baseline: str, definitions: Dict[str, object]) -> None:
         if proc_def.digest != base_def.digest
     ]
     if diff_envs:
-        with st.expander("차이 상세 (공백/빈줄 무시)"):
+        with st.expander(exp_diff_title):
             base_lines = _build_comparable_lines(base_def.definition)
             for env_name in diff_envs:
                 proc_def = definitions[env_name]
@@ -96,13 +106,13 @@ def _render_results(baseline: str, definitions: Dict[str, object]) -> None:
                     label=f"기준({baseline})",
                     value=base_text,
                     height=220,
-                    key=f"diff_base_{env_name}",
+                    key=f"diff_base_{env_name}_{object_kind}",
                 )
                 cols[1].text_area(
                     label=f"{env_name}",
                     value=env_text,
                     height=220,
-                    key=f"diff_env_{env_name}",
+                    key=f"diff_env_{env_name}_{object_kind}",
                 )
 
 
@@ -184,6 +194,7 @@ def _init_state() -> None:
     st.session_state.setdefault("bulk_results", [])
     st.session_state.setdefault("bulk_definitions", {})
     st.session_state.setdefault("bulk_errors", {})
+    st.session_state.setdefault("bulk_object_kind", "routine")
 
 
 def _build_excel_bytes(result_df: pd.DataFrame) -> bytes:
@@ -199,7 +210,11 @@ def main() -> None:
     st.title("DB 프로시저 형상 비교")
 
     _init_state()
-    st.info("프로시저/함수 object_id 또는 schema.name을 입력하세요.")
+    st.info(
+        "프로시저·함수·뷰는 `sys.sql_modules` 본문을, "
+        "사용자 테이블은 컬럼·타입·NULL·IDENTITY·계산열 정의 메타를 환경별로 비교합니다. "
+        "식별자는 object_id 또는 schema.name 형식을 권장합니다."
+    )
 
     dotenv_path = st.text_input("dotenv 경로", value=".env", help="프로젝트 루트 기준 상대 경로이거나, 절대 경로를 넣을 수 있습니다.")
     resolved = _resolve_dotenv_path(dotenv_path)
@@ -223,14 +238,24 @@ def main() -> None:
 
     envs = st.multiselect("비교할 환경", DEFAULT_ENVS, default=DEFAULT_ENVS)
     baseline = st.selectbox("기준 환경", envs or DEFAULT_ENVS, index=0)
+    object_kind = st.radio(
+        "비교 대상 유형",
+        options=["routine", "view", "table"],
+        format_func=lambda k: {
+            "routine": "프로시저·함수 (P, PC, FN, IF, TF)",
+            "view": "뷰 (V)",
+            "table": "테이블 (U, 컬럼 스키마)",
+        }[k],
+        horizontal=True,
+    )
 
     tabs = st.tabs(["단일 비교", "엑셀 일괄 비교", "공통코드 비교"])
 
     with tabs[0]:
-        proc_identifier = st.text_input("프로시저/함수 ID 또는 이름", value="")
+        proc_identifier = st.text_input("객체 ID 또는 이름 (schema.name 권장)", value="")
         if st.button("비교 실행", type="primary"):
             if not proc_identifier.strip():
-                st.error("프로시저/함수 ID 또는 이름을 입력하세요.")
+                st.error("객체 ID 또는 이름을 입력하세요.")
                 return
             if baseline not in envs:
                 st.error("기준 환경은 비교 환경 목록에 포함되어야 합니다.")
@@ -239,12 +264,16 @@ def main() -> None:
             with st.spinner("비교 중입니다..."):
                 try:
                     configs = _load_configs(envs)
-                    definitions = compare_across_envs(configs, proc_identifier.strip())
+                    definitions = compare_across_envs(
+                        configs,
+                        proc_identifier.strip(),
+                        object_kind=object_kind,
+                    )
                 except Exception as exc:
                     st.error(f"오류: {exc}")
                     return
 
-            _render_results(baseline, definitions)
+            _render_results(baseline, definitions, object_kind)
 
     with tabs[1]:
         st.caption("엑셀 첫 번째 컬럼 또는 proc/procedure/object_id/name 컬럼을 사용합니다.")
@@ -277,7 +306,11 @@ def main() -> None:
                 errors: Dict[str, str] = {}
                 for identifier in identifiers:
                     try:
-                        definitions = compare_across_envs(configs, identifier)
+                        definitions = compare_across_envs(
+                            configs,
+                            identifier,
+                            object_kind=object_kind,
+                        )
                         definitions_map[identifier] = definitions
                         base_def = definitions[baseline]
                         row = {"대상": identifier}
@@ -299,6 +332,7 @@ def main() -> None:
                 st.session_state["bulk_results"] = results
                 st.session_state["bulk_definitions"] = definitions_map
                 st.session_state["bulk_errors"] = errors
+                st.session_state["bulk_object_kind"] = object_kind
 
         if st.session_state["bulk_results"]:
             st.subheader("일괄 비교 결과")
@@ -316,6 +350,7 @@ def main() -> None:
                     _render_results(
                         baseline,
                         st.session_state["bulk_definitions"][selected],
+                        st.session_state.get("bulk_object_kind", object_kind),
                     )
 
     with tabs[2]:

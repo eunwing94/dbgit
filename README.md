@@ -1,6 +1,6 @@
 # DB 형상 비교
 
-프로시저/함수 ID(또는 이름)를 기준으로 환경별 정의가 다른지 확인하고, 공통코드(`CM_CD_D`) 갭도 비교할 수 있습니다.
+프로시저·함수·뷰·사용자 테이블(컬럼 스키마)을 환경별로 비교하고, 공통코드(`CM_CD_D`) 갭도 비교할 수 있습니다.
 
 ## GitHub Pages
 
@@ -48,8 +48,8 @@ streamlit run app.py
 
 ### 화면에서 할 수 있는 것
 
-- **단일 비교**: 프로시저/함수 ID 또는 `schema.name` 입력 후 비교
-- **엑셀 일괄 비교**: 엑셀 업로드 후 일괄 비교 (첫 컬럼 또는 `proc` / `procedure` / `object_id` / `name` 컬럼)
+- **단일 비교**: 유형(프로시저·함수 / 뷰 / 테이블) 선택 후 object_id 또는 `schema.name` 입력
+- **엑셀 일괄 비교**: 위와 동일 유형으로 목록 일괄 비교 (첫 컬럼 또는 `proc` / `procedure` / `object_id` / `name` 컬럼)
 - **공통코드 비교**: `CM_CD_D` 기준으로 기준 환경 대비 갭 비교, 결과 엑셀 다운로드
 
 ## CLI 사용법
@@ -58,6 +58,14 @@ streamlit run app.py
 
 ```
 PYTHONPATH=src python -m dbgit schema.proc_name
+```
+
+```
+PYTHONPATH=src python -m dbgit dbo.vw_Sample --kind view --baseline PRD --envs PRD,STG
+```
+
+```
+PYTHONPATH=src python -m dbgit dbo.MyTable --kind table --baseline PRD --envs PRD,STG,DEV,QA
 ```
 
 ```

@@ -13,11 +13,11 @@ from .config import EnvConfig, load_env_config
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="환경별 프로시저/함수 정의 차이를 확인합니다.",
+        description="환경별 프로시저·함수·뷰·테이블(스키마) 정의 차이를 확인합니다.",
     )
     parser.add_argument(
         "proc",
-        help="프로시저/함수 object_id 또는 이름 (schema.name 권장)",
+        help="object_id 또는 schema.name (프로시저·함수·뷰·테이블)",
     )
     parser.add_argument(
         "--envs",
@@ -33,6 +33,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dotenv",
         default=".env",
         help="환경변수 파일 경로 (기본: .env)",
+    )
+    parser.add_argument(
+        "--kind",
+        choices=("routine", "view", "table"),
+        default="routine",
+        help="비교 대상: routine=프로시저·함수, view=뷰, table=사용자 테이블 컬럼 스키마",
     )
     return parser
 
@@ -82,7 +88,7 @@ def main(argv: List[str] | None = None) -> int:
 
     try:
         configs = _load_envs(env_list)
-        definitions = compare_across_envs(configs, args.proc)
+        definitions = compare_across_envs(configs, args.proc, object_kind=args.kind)
     except Exception as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1

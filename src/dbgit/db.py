@@ -28,3 +28,8 @@ def open_connection(config: EnvConfig) -> pyodbc.Connection:
 def fetch_one(cursor: pyodbc.Cursor, query: str, params: Iterable[object]) -> pyodbc.Row | None:
     cursor.execute(query, params)
     return cursor.fetchone()
+
+
+def fetch_all(cursor: pyodbc.Cursor, query: str, params: Iterable[object]) -> list[pyodbc.Row]:
+    cursor.execute(query, params)
+    return list(cursor.fetchall())
