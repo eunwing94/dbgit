@@ -282,7 +282,13 @@ def main() -> None:
             f"**{baseline}** DB 기준으로 조회합니다. 이름·본문(정의)에 검색어가 포함된 객체를 찾습니다. "
             "대량 DB에서는 본문 검색이 다소 느릴 수 있습니다."
         )
-        q_needle = st.text_input("검색어", value="", key="obj_search_needle", placeholder="예: SA, usp_Order")
+        q_needle = st.text_input(
+            "검색어",
+            value="",
+            key="obj_search_needle",
+            placeholder="예: SA | usp_Order 또는  foo OR bar",
+            help="여러 단어는 ` OR ` 또는 `|` 로 나누면 됩니다. (대소문자 무시) 한 토큰이라도 이름·본문에 맞으면 조회됩니다.",
+        )
         c1, c2 = st.columns(2)
         with c1:
             inc_name = st.checkbox("이름에 포함", value=True, key="obj_search_name")
