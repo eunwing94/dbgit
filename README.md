@@ -100,6 +100,11 @@ PYTHONPATH=src python -m dbgit 123456 --baseline PRD --envs PRD,STG,DEV,QA
 STG, QA
 ```
 
+## 연결 오류 (HYT00 Login timeout)
+
+- `.env`에 `DBGIT_ODBC_LOGIN_TIMEOUT_SEC=90` 처럼 초 단위로 늘려 보세요 (기본 60초, 이전에는 5초로 매우 짧았습니다).
+- 여전히 타임아웃이면 VPN·방화벽, `*_HOST` / `*_PORT` 가 해당 PC에서 실제로 열리는지 확인하세요.
+
 ## 주의
 
 - 실제 비밀번호는 `.env`에만 저장하세요.
