@@ -5,7 +5,7 @@ import re
 import difflib
 from pathlib import Path
 from io import BytesIO
-from typing import Dict, List
+from typing import Dict, List, NamedTuple, cast
 
 import pandas as pd
 import streamlit as st
@@ -16,10 +16,10 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from dbgit.compare import compare_across_envs
+from dbgit.compare import ObjectKind, compare_across_envs
 from dbgit.common_code import compare_cm_cd_d
 from dbgit.config import EnvConfig, load_env_config
-from dbgit.object_search import search_objects, search_truncated
+from dbgit.object_search import search_objects
 
 
 DEFAULT_ENVS = ["PRD", "STG", "DEV", "QA"]
@@ -171,8 +171,32 @@ def _build_diff_text(
     return "\n".join(base_out).strip(), "\n".join(env_out).strip()
 
 
-def _extract_proc_ids(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> List[str]:
-    df = pd.read_excel(uploaded_file)
+OBJECT_SEARCH_BULK_COLUMNS = frozenset({"비교유형", "sys_type", "object_id", "이름"})
+_OBJECT_SEARCH_KINDS: frozenset[str] = frozenset({"routine", "view", "table"})
+
+
+class BulkCompareItem(NamedTuple):
+    """일괄 비교 한 행: 식별자( object_id 또는 이름 ) + 비교 유형."""
+
+    identifier: str
+    object_kind: ObjectKind
+
+
+def _read_bulk_upload_df(uploaded: object) -> pd.DataFrame:
+    """첫 시트 또는 시트명 `object_search` 를 읽고, 컬럼명 앞뒤 공백을 제거합니다."""
+    bio = BytesIO(uploaded.getvalue())
+    xl = pd.ExcelFile(bio)
+    sheet: str | int = "object_search" if "object_search" in xl.sheet_names else 0
+    df = pd.read_excel(xl, sheet_name=sheet)
+    if df.empty:
+        return df
+    out = df.copy()
+    out.columns = [str(c).strip() for c in out.columns]
+    return out
+
+
+def _legacy_bulk_identifiers(df: pd.DataFrame) -> List[str]:
+    """객체 검색 양식이 아닐 때: proc / procedure / object_id / name 또는 첫 열."""
     if df.empty:
         return []
     for candidate in ("proc", "procedure", "object_id", "name"):
@@ -181,7 +205,7 @@ def _extract_proc_ids(uploaded_file: st.runtime.uploaded_file_manager.UploadedFi
             break
     else:
         series = df.iloc[:, 0]
-    values = []
+    values: List[str] = []
     for item in series.tolist():
         if item is None or (isinstance(item, float) and pd.isna(item)):
             continue
@@ -191,11 +215,65 @@ def _extract_proc_ids(uploaded_file: st.runtime.uploaded_file_manager.UploadedFi
     return values
 
 
+def _object_id_cell_to_identifier(cell: object) -> str | None:
+    if cell is None or (isinstance(cell, float) and pd.isna(cell)):
+        return None
+    try:
+        return str(int(float(cell)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_object_search_bulk_items(df: pd.DataFrame) -> List[BulkCompareItem]:
+    """
+    객체 검색 다운로드 양식(비교유형, sys_type, object_id, 이름) 행을 파싱합니다.
+    식별자는 object_id가 있으면 그것을, 없으면 이름 문자열을 사용합니다.
+    """
+    if not OBJECT_SEARCH_BULK_COLUMNS.issubset(df.columns):
+        return []
+    items: List[BulkCompareItem] = []
+    for excel_row, (_, row) in enumerate(df.iterrows(), start=2):
+        kind_raw = row.get("비교유형")
+        if kind_raw is None or (isinstance(kind_raw, float) and pd.isna(kind_raw)):
+            continue
+        kind = str(kind_raw).strip().lower()
+        if kind not in _OBJECT_SEARCH_KINDS:
+            raise ValueError(
+                f"{excel_row}행: 비교유형은 routine, view, table 중 하나여야 합니다. (입력: {kind_raw!r})"
+            )
+
+        ident = _object_id_cell_to_identifier(row.get("object_id"))
+        if ident is None:
+            name_cell = row.get("이름")
+            if name_cell is None or (isinstance(name_cell, float) and pd.isna(name_cell)):
+                continue
+            name = str(name_cell).strip()
+            if not name:
+                continue
+            ident = name
+
+        items.append(BulkCompareItem(ident, cast(ObjectKind, kind)))
+    return items
+
+
+def _plan_bulk_compare_items(df: pd.DataFrame, fallback_kind: ObjectKind) -> tuple[List[BulkCompareItem], bool]:
+    """
+    업로드 시트를 분석해 일괄 비교 행 목록을 만듭니다.
+
+    Returns:
+        (items, used_object_search_format)
+    """
+    if OBJECT_SEARCH_BULK_COLUMNS.issubset(df.columns):
+        return _parse_object_search_bulk_items(df), True
+    return [BulkCompareItem(i, fallback_kind) for i in _legacy_bulk_identifiers(df)], False
+
+
 def _init_state() -> None:
     st.session_state.setdefault("bulk_results", [])
     st.session_state.setdefault("bulk_definitions", {})
     st.session_state.setdefault("bulk_errors", {})
     st.session_state.setdefault("bulk_object_kind", "routine")
+    st.session_state.setdefault("bulk_kind_by_identifier", {})
     st.session_state.setdefault("single_identifier", "")
     st.session_state.setdefault("obj_search_hits", [])
 
@@ -209,19 +287,17 @@ def _build_excel_bytes(result_df: pd.DataFrame) -> bytes:
 
 
 def _build_object_search_excel_bytes(hits: list) -> bytes:
-    """객체 검색 결과 목록을 xlsx로 직렬화합니다."""
+    """객체 검색 결과 목록을 xlsx로 직렬화합니다. 컬럼 순서: 비교유형, sys_type, object_id, 이름."""
     rows = [
         {
             "비교유형": h.compare_kind,
-            "스키마": h.schema_name,
-            "이름": h.name,
-            "object_id": h.object_id,
-            "전체이름": h.full_name,
             "sys_type": h.sql_type,
+            "object_id": h.object_id,
+            "이름": h.name,
         }
         for h in hits
     ]
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows, columns=["비교유형", "sys_type", "object_id", "이름"])
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="object_search")
@@ -315,7 +391,7 @@ def main() -> None:
             else:
                 try:
                     base_cfg = load_env_config(baseline)
-                    hits = search_objects(
+                    outcome = search_objects(
                         base_cfg,
                         needle=q_needle,
                         include_name=inc_name,
@@ -323,19 +399,29 @@ def main() -> None:
                         include_routine=sr_routine,
                         include_view=sr_view,
                         include_table=sr_table,
-                        max_rows=500,
                     )
                 except Exception as exc:
                     st.error(f"조회 실패: {exc}")
                 else:
-                    st.session_state["obj_search_hits"] = hits
-                    st.session_state["obj_search_trunc"] = search_truncated(hits, 500)
+                    st.session_state["obj_search_hits"] = outcome.hits
+                    st.session_state["obj_search_display_trunc"] = len(outcome.hits) > 500
+                    st.session_state["obj_search_sql_cap_hit"] = outcome.reached_sql_fetch_cap
+                    st.session_state["obj_search_sql_cap"] = outcome.sql_fetch_cap
 
         hits = st.session_state.get("obj_search_hits") or []
         if hits:
             display = hits[:500]
-            if st.session_state.get("obj_search_trunc"):
-                st.warning("결과가 500건을 넘어 앞 500건만 표시합니다. 검색어를 좁혀 주세요.")
+            if st.session_state.get("obj_search_display_trunc"):
+                st.warning(
+                    f"화면과 아래 선택 목록은 500건까지입니다(총 {len(hits):,}건). "
+                    "**엑셀·CSV**에는 조회된 전체가 포함됩니다."
+                )
+            if st.session_state.get("obj_search_sql_cap_hit"):
+                cap = int(st.session_state.get("obj_search_sql_cap") or 100_000)
+                st.warning(
+                    f"한 번의 SQL 조회가 상한({cap:,}행)에 도달했을 수 있습니다. "
+                    "더 필요하면 검색어를 좁히거나 환경변수 `DBGIT_OBJECT_SEARCH_SQL_CAP`을 조정하세요."
+                )
             df_h = pd.DataFrame(
                 [
                     {
@@ -348,11 +434,23 @@ def main() -> None:
                     for h in display
                 ]
             )
+            df_export = pd.DataFrame(
+                [
+                    {
+                        "유형": h.compare_kind,
+                        "schema": h.schema_name,
+                        "이름": h.name,
+                        "object_id": h.object_id,
+                        "전체이름": h.full_name,
+                    }
+                    for h in hits
+                ]
+            )
             safe_base = "".join(ch if str(ch).isalnum() else "_" for ch in str(baseline))[:40] or "env"
-            xlsx_bytes = _build_object_search_excel_bytes(display)
-            csv_bytes = df_h.to_csv(index=False).encode("utf-8-sig")
+            xlsx_bytes = _build_object_search_excel_bytes(hits)
+            csv_bytes = df_export.to_csv(index=False).encode("utf-8-sig")
 
-            st.markdown("**조회 결과보내기** (표와 동일)")
+            st.markdown(f"**조회 결과 보내기** (엑셀·CSV: 전체 **{len(hits):,}**건)")
             dl1, dl2 = st.columns(2)
             with dl1:
                 st.download_button(
@@ -427,7 +525,11 @@ def main() -> None:
             _render_results(b, defs, okind)
 
     with tabs[2]:
-        st.caption("엑셀 첫 번째 컬럼 또는 proc/procedure/object_id/name 컬럼을 사용합니다.")
+        st.caption(
+            "객체 검색에서 받은 엑셀(**비교유형**, sys_type, object_id, **이름** 컬럼)이면 행마다 비교 유형을 자동으로 쓰며, "
+            "위의 「비교 대상 유형」은 무시됩니다. 그 외 파일은 기존처럼 첫 열 또는 proc / procedure / object_id / name 열과 "
+            "선택한 비교 대상 유형을 사용합니다."
+        )
         uploaded = st.file_uploader("엑셀 파일 업로드", type=["xlsx", "xls"])
         if st.button("일괄 비교 실행"):
             if baseline not in envs:
@@ -437,12 +539,16 @@ def main() -> None:
                 st.error("엑셀 파일을 업로드하세요.")
                 return
             try:
-                identifiers = _extract_proc_ids(uploaded)
+                df = _read_bulk_upload_df(uploaded)
+                items, from_object_search = _plan_bulk_compare_items(df, cast(ObjectKind, object_kind))
             except Exception as exc:
                 st.error(f"엑셀 읽기 실패: {exc}")
                 return
-            if not identifiers:
-                st.error("엑셀에서 비교할 항목을 찾지 못했습니다.")
+            if not items:
+                if from_object_search:
+                    st.error("객체 검색 양식으로 인식했으나 비교할 유효한 행이 없습니다. 비교유형·object_id/이름을 확인하세요.")
+                else:
+                    st.error("엑셀에서 비교할 항목을 찾지 못했습니다.")
                 return
 
             with st.spinner("일괄 비교 중입니다..."):
@@ -455,16 +561,22 @@ def main() -> None:
                 results = []
                 definitions_map: Dict[str, Dict[str, object]] = {}
                 errors: Dict[str, str] = {}
-                for identifier in identifiers:
+                kind_by_id: Dict[str, ObjectKind] = {}
+                for it in items:
+                    identifier = it.identifier
+                    row_kind = it.object_kind
+                    kind_by_id[identifier] = row_kind
                     try:
                         definitions = compare_across_envs(
                             configs,
                             identifier,
-                            object_kind=object_kind,
+                            object_kind=row_kind,
                         )
                         definitions_map[identifier] = definitions
                         base_def = definitions[baseline]
-                        row = {"대상": identifier}
+                        row: Dict[str, object] = {"대상": identifier}
+                        if from_object_search:
+                            row["비교유형"] = row_kind
                         any_diff = False
                         for env_name, proc_def in definitions.items():
                             status = "SAME" if proc_def.digest == base_def.digest else "DIFF"
@@ -476,14 +588,22 @@ def main() -> None:
                     except Exception as exc:
                         errors[identifier] = str(exc)
                         row = {"대상": identifier, "상태": "ERROR"}
+                        if from_object_search:
+                            row["비교유형"] = row_kind
                         for env_name in envs:
                             row[env_name] = "ERROR"
                         results.append(row)
 
+                kinds_set = {it.object_kind for it in items}
+                resolved_bulk_kind: ObjectKind = (
+                    next(iter(kinds_set)) if len(kinds_set) == 1 else items[0].object_kind
+                )
+
                 st.session_state["bulk_results"] = results
                 st.session_state["bulk_definitions"] = definitions_map
                 st.session_state["bulk_errors"] = errors
-                st.session_state["bulk_object_kind"] = object_kind
+                st.session_state["bulk_object_kind"] = resolved_bulk_kind
+                st.session_state["bulk_kind_by_identifier"] = kind_by_id
 
         if st.session_state["bulk_results"]:
             st.subheader("일괄 비교 결과")
@@ -498,10 +618,14 @@ def main() -> None:
             if options:
                 selected = st.selectbox("상세 비교 대상 선택", options)
                 if selected:
+                    detail_kind: ObjectKind = st.session_state.get("bulk_kind_by_identifier", {}).get(
+                        selected,
+                        st.session_state.get("bulk_object_kind", object_kind),
+                    )
                     _render_results(
                         baseline,
                         st.session_state["bulk_definitions"][selected],
-                        st.session_state.get("bulk_object_kind", object_kind),
+                        detail_kind,
                     )
 
     with tabs[3]:

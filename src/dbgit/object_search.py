@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from .compare import ROUTINE_TYPES, ObjectKind
 from .config import EnvConfig
@@ -23,6 +25,23 @@ class ObjectSearchHit:
     @property
     def full_name(self) -> str:
         return f"{self.schema_name}.{self.name}"
+
+
+class ObjectSearchOutcome(NamedTuple):
+    """`search_objects` 반환: 전체 조회 행 + SQL TOP 상한 도달 여부."""
+
+    hits: list[ObjectSearchHit]
+    reached_sql_fetch_cap: bool
+    sql_fetch_cap: int
+
+
+def object_search_sql_fetch_cap() -> int:
+    """SQL `TOP (n)` 상한. 환경변수 `DBGIT_OBJECT_SEARCH_SQL_CAP` (기본 100000, 최대 500000)."""
+    raw = os.getenv("DBGIT_OBJECT_SEARCH_SQL_CAP", "100000")
+    try:
+        return max(500, min(int(raw), 500_000))
+    except ValueError:
+        return 100_000
 
 
 def escape_sql_like_fragment(fragment: str) -> str:
@@ -117,15 +136,16 @@ def search_objects(
     include_routine: bool,
     include_view: bool,
     include_table: bool,
-    max_rows: int = 500,
-) -> list[ObjectSearchHit]:
+) -> ObjectSearchOutcome:
     """
     한 환경(보통 기준 환경) DB에서 조건에 맞는 객체를 조회합니다.
 
     - 검색어: `|` 또는 ` OR ` / ` or ` 로 여러 토큰을 주면 **토큰 간 OR** (어느 하나라도 이름·본문에 맞으면 포함).
     - 이름: schema.name, name, schema 각각에 대한 부분 일치(LIKE).
     - 본문: 프로시저·함수·뷰는 sys.sql_modules.definition, 테이블은 컬럼명·계산열 정의에 대한 LIKE.
+    - SQL 행 수 상한은 `DBGIT_OBJECT_SEARCH_SQL_CAP` (기본 100000). 상한에 걸리면 `reached_sql_fetch_cap` 이 True.
     """
+    sql_cap = object_search_sql_fetch_cap()
     if not include_name and not include_definition:
         raise ValueError("이름 또는 본문/컬럼 검색 중 하나 이상을 선택하세요.")
     if not include_routine and not include_view and not include_table:
@@ -133,11 +153,12 @@ def search_objects(
 
     patterns = patterns_from_needle(needle)
     if not patterns:
-        return []
+        return ObjectSearchOutcome([], False, sql_cap)
 
     hits: list[ObjectSearchHit] = []
     seen: set[tuple[str, str, str]] = set()
-    limit = max(1, min(max_rows + 1, 2000))
+    limit = sql_cap
+    reached_sql_fetch_cap = False
 
     name_sql, name_params = _module_name_match_sql(patterns)
     def_sql, def_params = _module_definition_match_sql(patterns)
@@ -179,6 +200,8 @@ ORDER BY s.name, o.name, o.object_id
         with open_connection(config) as conn:
             cursor = conn.cursor()
             rows = fetch_all(cursor, sql_modules_sql, params)
+        if len(rows) >= limit:
+            reached_sql_fetch_cap = True
         for row in rows:
             key = (row.schema_name, row.name, row.object_type)
             if key in seen:
@@ -224,6 +247,8 @@ ORDER BY s.name, o.name, o.object_id
         with open_connection(config) as conn:
             cursor = conn.cursor()
             rows = fetch_all(cursor, table_sql, params_t)
+        if len(rows) >= limit:
+            reached_sql_fetch_cap = True
         for row in rows:
             key = (row.schema_name, row.name, row.object_type)
             if key in seen:
@@ -240,8 +265,8 @@ ORDER BY s.name, o.name, o.object_id
             )
 
     hits.sort(key=lambda h: (h.schema_name.lower(), h.name.lower(), h.compare_kind))
-    return hits[: max_rows + 1]
-
-
-def search_truncated(hits: list[ObjectSearchHit], max_rows: int) -> bool:
-    return len(hits) > max_rows
+    return ObjectSearchOutcome(
+        hits=hits,
+        reached_sql_fetch_cap=reached_sql_fetch_cap,
+        sql_fetch_cap=limit,
+    )
