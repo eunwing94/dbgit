@@ -208,6 +208,27 @@ def _build_excel_bytes(result_df: pd.DataFrame) -> bytes:
     return buffer.read()
 
 
+def _build_object_search_excel_bytes(hits: list) -> bytes:
+    """객체 검색 결과 목록을 xlsx로 직렬화합니다."""
+    rows = [
+        {
+            "비교유형": h.compare_kind,
+            "스키마": h.schema_name,
+            "이름": h.name,
+            "object_id": h.object_id,
+            "전체이름": h.full_name,
+            "sys_type": h.sql_type,
+        }
+        for h in hits
+    ]
+    df = pd.DataFrame(rows)
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="object_search")
+    buffer.seek(0)
+    return buffer.read()
+
+
 def main() -> None:
     st.set_page_config(page_title="DB 프로시저 비교", layout="wide")
     st.title("DB 프로시저 형상 비교")
@@ -253,131 +274,138 @@ def main() -> None:
         key="object_kind",
     )
 
-    tabs = st.tabs(["단일 비교", "엑셀 일괄 비교", "공통코드 비교"])
+    tabs = st.tabs(["객체 검색", "단일 비교", "엑셀 일괄 비교", "공통코드 비교"])
 
     with tabs[0]:
-        col_search, col_single = st.columns([1, 1.1], gap="large")
+        st.subheader("객체 검색")
+        st.caption(
+            f"**{baseline}** DB 기준으로 조회합니다. 이름·본문(정의)에 검색어가 포함된 객체를 찾습니다. "
+            "대량 DB에서는 본문 검색이 다소 느릴 수 있습니다."
+        )
+        q_needle = st.text_input("검색어", value="", key="obj_search_needle", placeholder="예: SA, usp_Order")
+        c1, c2 = st.columns(2)
+        with c1:
+            inc_name = st.checkbox("이름에 포함", value=True, key="obj_search_name")
+        with c2:
+            inc_body = st.checkbox("본문·컬럼에 포함", value=True, key="obj_search_body")
+        st.markdown("**대상 유형**")
+        c3, c4, c5 = st.columns(3)
+        with c3:
+            sr_routine = st.checkbox("프로시저·함수", value=True, key="obj_search_routine")
+        with c4:
+            sr_view = st.checkbox("뷰", value=True, key="obj_search_view")
+        with c5:
+            sr_table = st.checkbox("테이블", value=True, key="obj_search_table")
 
-        with col_search:
-            st.subheader("객체 검색")
-            st.caption(
-                f"**{baseline}** DB 기준으로 조회합니다. 이름·본문(정의)에 검색어가 포함된 객체를 찾습니다. "
-                "대량 DB에서는 본문 검색이 다소 느릴 수 있습니다."
-            )
-            q_needle = st.text_input("검색어", value="", key="obj_search_needle", placeholder="예: SA, usp_Order")
-            c1, c2 = st.columns(2)
-            with c1:
-                inc_name = st.checkbox("이름에 포함", value=True, key="obj_search_name")
-            with c2:
-                inc_body = st.checkbox("본문·컬럼에 포함", value=True, key="obj_search_body")
-            st.markdown("**대상 유형**")
-            c3, c4, c5 = st.columns(3)
-            with c3:
-                sr_routine = st.checkbox("프로시저·함수", value=True, key="obj_search_routine")
-            with c4:
-                sr_view = st.checkbox("뷰", value=True, key="obj_search_view")
-            with c5:
-                sr_table = st.checkbox("테이블", value=True, key="obj_search_table")
-
-            if st.button("조회", type="secondary", key="obj_search_run"):
-                if not q_needle.strip():
-                    st.error("검색어를 입력하세요.")
-                elif baseline not in envs:
-                    st.error("기준 환경을 비교 환경 목록에 포함하세요.")
-                elif not inc_name and not inc_body:
-                    st.error("이름 또는 본문·컬럼 검색을 하나 이상 켜 주세요.")
-                elif not sr_routine and not sr_view and not sr_table:
-                    st.error("대상 유형을 하나 이상 선택하세요.")
-                else:
-                    try:
-                        base_cfg = load_env_config(baseline)
-                        hits = search_objects(
-                            base_cfg,
-                            needle=q_needle,
-                            include_name=inc_name,
-                            include_definition=inc_body,
-                            include_routine=sr_routine,
-                            include_view=sr_view,
-                            include_table=sr_table,
-                            max_rows=500,
-                        )
-                    except Exception as exc:
-                        st.error(f"조회 실패: {exc}")
-                    else:
-                        st.session_state["obj_search_hits"] = hits
-                        st.session_state["obj_search_trunc"] = search_truncated(hits, 500)
-
-            hits = st.session_state.get("obj_search_hits") or []
-            if hits:
-                display = hits[:500]
-                if st.session_state.get("obj_search_trunc"):
-                    st.warning("결과가 500건을 넘어 앞 500건만 표시합니다. 검색어를 좁혀 주세요.")
-                df_h = pd.DataFrame(
-                    [
-                        {
-                            "유형": h.compare_kind,
-                            "schema": h.schema_name,
-                            "이름": h.name,
-                            "object_id": h.object_id,
-                            "전체이름": h.full_name,
-                        }
-                        for h in display
-                    ]
-                )
-                st.dataframe(df_h, use_container_width=True, height=280)
-                pick_label = st.selectbox(
-                    "비교에 사용할 객체 선택",
-                    options=[h.full_name for h in display],
-                    key="obj_search_pick",
-                )
-                picked = next(h for h in display if h.full_name == pick_label)
-                if st.button("선택 객체를 오른쪽에 반영", key="obj_search_apply"):
-                    st.session_state["single_identifier"] = picked.full_name
-                    st.session_state["object_kind"] = picked.compare_kind
-                    st.session_state["apply_from_search_msg"] = (
-                        f"반영: `{picked.full_name}` → 유형 `{picked.compare_kind}`"
+        if st.button("조회", type="secondary", key="obj_search_run"):
+            if not q_needle.strip():
+                st.error("검색어를 입력하세요.")
+            elif baseline not in envs:
+                st.error("기준 환경을 비교 환경 목록에 포함하세요.")
+            elif not inc_name and not inc_body:
+                st.error("이름 또는 본문·컬럼 검색을 하나 이상 켜 주세요.")
+            elif not sr_routine and not sr_view and not sr_table:
+                st.error("대상 유형을 하나 이상 선택하세요.")
+            else:
+                try:
+                    base_cfg = load_env_config(baseline)
+                    hits = search_objects(
+                        base_cfg,
+                        needle=q_needle,
+                        include_name=inc_name,
+                        include_definition=inc_body,
+                        include_routine=sr_routine,
+                        include_view=sr_view,
+                        include_table=sr_table,
+                        max_rows=500,
                     )
-                    st.rerun()
-
-        with col_single:
-            st.subheader("단일 비교")
-            flash = st.session_state.pop("apply_from_search_msg", None)
-            if flash:
-                st.success(flash)
-            proc_identifier = st.text_input(
-                "객체 ID 또는 이름 (schema.name 권장)",
-                key="single_identifier",
-            )
-            if st.button("비교 실행", type="primary", key="single_compare_run"):
-                st.session_state.pop("single_compare_result", None)
-                if not proc_identifier.strip():
-                    st.error("객체 ID 또는 이름을 입력하세요.")
-                elif baseline not in envs:
-                    st.error("기준 환경은 비교 환경 목록에 포함되어야 합니다.")
+                except Exception as exc:
+                    st.error(f"조회 실패: {exc}")
                 else:
-                    with st.spinner("비교 중입니다..."):
-                        try:
-                            configs = _load_configs(envs)
-                            definitions = compare_across_envs(
-                                configs,
-                                proc_identifier.strip(),
-                                object_kind=object_kind,
-                            )
-                        except Exception as exc:
-                            st.error(f"오류: {exc}")
-                        else:
-                            st.session_state["single_compare_result"] = (
-                                baseline,
-                                definitions,
-                                object_kind,
-                            )
+                    st.session_state["obj_search_hits"] = hits
+                    st.session_state["obj_search_trunc"] = search_truncated(hits, 500)
 
-            res = st.session_state.get("single_compare_result")
-            if res:
-                b, defs, okind = res
-                _render_results(b, defs, okind)
+        hits = st.session_state.get("obj_search_hits") or []
+        if hits:
+            display = hits[:500]
+            if st.session_state.get("obj_search_trunc"):
+                st.warning("결과가 500건을 넘어 앞 500건만 표시합니다. 검색어를 좁혀 주세요.")
+            df_h = pd.DataFrame(
+                [
+                    {
+                        "유형": h.compare_kind,
+                        "schema": h.schema_name,
+                        "이름": h.name,
+                        "object_id": h.object_id,
+                        "전체이름": h.full_name,
+                    }
+                    for h in display
+                ]
+            )
+            st.dataframe(df_h, use_container_width=True, height=280)
+            safe_base = "".join(ch if str(ch).isalnum() else "_" for ch in str(baseline))[:40] or "env"
+            xlsx_bytes = _build_object_search_excel_bytes(display)
+            st.download_button(
+                label="엑셀 다운로드 (조회 결과)",
+                data=xlsx_bytes,
+                file_name=f"object_search_{safe_base}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="obj_search_xlsx",
+            )
+            pick_label = st.selectbox(
+                "단일 비교에 사용할 객체 선택",
+                options=[h.full_name for h in display],
+                key="obj_search_pick",
+            )
+            picked = next(h for h in display if h.full_name == pick_label)
+            if st.button("선택 객체를 단일 비교에 반영", key="obj_search_apply"):
+                st.session_state["single_identifier"] = picked.full_name
+                st.session_state["object_kind"] = picked.compare_kind
+                st.session_state["apply_from_search_msg"] = (
+                    f"'단일 비교' 탭으로 이동한 뒤 **비교 실행**을 누르세요. "
+                    f"(`{picked.full_name}`, 유형 `{picked.compare_kind}`)"
+                )
+                st.rerun()
 
     with tabs[1]:
+        st.subheader("단일 비교")
+        flash = st.session_state.pop("apply_from_search_msg", None)
+        if flash:
+            st.success(flash)
+        proc_identifier = st.text_input(
+            "객체 ID 또는 이름 (schema.name 권장)",
+            key="single_identifier",
+        )
+        if st.button("비교 실행", type="primary", key="single_compare_run"):
+            st.session_state.pop("single_compare_result", None)
+            if not proc_identifier.strip():
+                st.error("객체 ID 또는 이름을 입력하세요.")
+            elif baseline not in envs:
+                st.error("기준 환경은 비교 환경 목록에 포함되어야 합니다.")
+            else:
+                with st.spinner("비교 중입니다..."):
+                    try:
+                        configs = _load_configs(envs)
+                        definitions = compare_across_envs(
+                            configs,
+                            proc_identifier.strip(),
+                            object_kind=object_kind,
+                        )
+                    except Exception as exc:
+                        st.error(f"오류: {exc}")
+                    else:
+                        st.session_state["single_compare_result"] = (
+                            baseline,
+                            definitions,
+                            object_kind,
+                        )
+
+        res = st.session_state.get("single_compare_result")
+        if res:
+            b, defs, okind = res
+            _render_results(b, defs, okind)
+
+    with tabs[2]:
         st.caption("엑셀 첫 번째 컬럼 또는 proc/procedure/object_id/name 컬럼을 사용합니다.")
         uploaded = st.file_uploader("엑셀 파일 업로드", type=["xlsx", "xls"])
         if st.button("일괄 비교 실행"):
@@ -455,8 +483,7 @@ def main() -> None:
                         st.session_state.get("bulk_object_kind", object_kind),
                     )
 
-    with tabs[2]:
-        st.caption("CM_CD_D 테이블 기준으로 환경별 공통코드 차이를 비교합니다.")
+    with tabs[3]:
         if st.button("공통코드 비교 실행"):
             if baseline not in envs:
                 st.error("기준 환경은 비교 환경 목록에 포함되어야 합니다.")
