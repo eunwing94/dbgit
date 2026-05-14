@@ -342,16 +342,31 @@ def main() -> None:
                     for h in display
                 ]
             )
-            st.dataframe(df_h, use_container_width=True, height=280)
             safe_base = "".join(ch if str(ch).isalnum() else "_" for ch in str(baseline))[:40] or "env"
             xlsx_bytes = _build_object_search_excel_bytes(display)
-            st.download_button(
-                label="엑셀 다운로드 (조회 결과)",
-                data=xlsx_bytes,
-                file_name=f"object_search_{safe_base}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="obj_search_xlsx",
-            )
+            csv_bytes = df_h.to_csv(index=False).encode("utf-8-sig")
+
+            st.markdown("**조회 결과보내기** (표와 동일)")
+            dl1, dl2 = st.columns(2)
+            with dl1:
+                st.download_button(
+                    label="엑셀 (.xlsx) 다운로드",
+                    data=xlsx_bytes,
+                    file_name=f"object_search_{safe_base}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="obj_search_xlsx",
+                    type="primary",
+                )
+            with dl2:
+                st.download_button(
+                    label="CSV (.csv) 다운로드",
+                    data=csv_bytes,
+                    file_name=f"object_search_{safe_base}.csv",
+                    mime="text/csv",
+                    key="obj_search_csv",
+                )
+
+            st.dataframe(df_h, use_container_width=True, height=280)
             pick_label = st.selectbox(
                 "단일 비교에 사용할 객체 선택",
                 options=[h.full_name for h in display],
